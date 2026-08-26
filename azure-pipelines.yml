@@ -4,24 +4,52 @@ pool:
   vmImage: ubuntu-latest
 
 stages:
-  # ------------------Build Stage(Continuous  Integration Stage (CI))-------------------------------->
+
+  # ============================================================
+  # BUILD STAGE - Terraform CI
+  # ============================================================
   - stage: Build
+    displayName: "Terraform Build"
+
     jobs:
-      - job: TerraformBuild # Install Terraform in Agent
+
+      # ==========================================================
+      # TERRAFORM BUILD JOB
+      # ==========================================================
+      - job: TerraformBuild
         displayName: "Terraform Job"
-        #  Terraform Build --> Install, init, validate, plan steps in this job --------->
+
         steps:
-          - task: TerraformInstaller@1
-            displayName: "Install Terraform"
-            inputs:
-              terraformVersion:
-                latest
 
-                # Running Terraform fmt,Init, Validate and Plan
+          # ------------------------------------------------------
+          # Install Terraform
+          # ------------------------------------------------------
           - script: |
-              terraform fmt
-            displayName: "Format Checking"
+              TERRAFORM_VERSION=4.80.0
 
+              curl -fsSL https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip -o terraform.zip
+
+              unzip -o terraform.zip
+
+              sudo mv terraform /usr/local/bin/
+
+              terraform version
+            displayName: "Install Terraform"
+
+
+          # ------------------------------------------------------
+          # Terraform Format Check
+          # ------------------------------------------------------
+          - script: |
+              cd "$(System.DefaultWorkingDirectory)/Parent Module"
+
+              terraform fmt -check -recursive
+            displayName: "Terraform Format Check"
+
+
+          # ------------------------------------------------------
+          # Terraform Init
+          # ------------------------------------------------------
           - task: AzureCLI@2
             displayName: "Terraform Init"
             inputs:
@@ -32,11 +60,14 @@ stages:
                 cd "$(System.DefaultWorkingDirectory)/Parent Module"
 
                 terraform init \
-                -backend-config="storage_account_name=storageaccount1987" \
-                -backend-config="container_name=dev-backend-statefile" \
-                -backend-config="key=tfstatefile"
+                  -backend-config="storage_account_name=storageaccount1987" \
+                  -backend-config="container_name=dev-backend-statefile" \
+                  -backend-config="key=tfstatefile"
 
-          # Terraform Validate using Azure Cli
+
+          # ------------------------------------------------------
+          # Terraform Validate
+          # ------------------------------------------------------
           - task: AzureCLI@2
             displayName: "Terraform Validate"
             inputs:
@@ -45,9 +76,13 @@ stages:
               scriptLocation: inlineScript
               inlineScript: |
                 cd "$(System.DefaultWorkingDirectory)/Parent Module"
+
                 terraform validate
 
-          # Terraform Plan and generating output in tfplan using Azure Cli
+
+          # ------------------------------------------------------
+          # Terraform Plan
+          # ------------------------------------------------------
           - task: AzureCLI@2
             displayName: "Terraform Plan"
             inputs:
@@ -56,90 +91,161 @@ stages:
               scriptLocation: inlineScript
               inlineScript: |
                 cd "$(System.DefaultWorkingDirectory)/Parent Module"
+
                 terraform plan -out=tfplan
 
-          # Publishing Artifiacts
+
+          # ------------------------------------------------------
+          # Publish Terraform Plan
+          # ------------------------------------------------------
           - task: PublishPipelineArtifact@1
-            displayName: "Publishing Artifacts"
+            displayName: "Publishing Terraform Plan"
             inputs:
               targetPath: "$(System.DefaultWorkingDirectory)/Parent Module/tfplan"
               artifact: "TerraformPlan"
               publishLocation: pipeline
 
-      - job: Security #Adding tool for security of Code
+
+      # ==========================================================
+      # SECURITY JOB
+      # ==========================================================
+      - job: Security
         dependsOn: TerraformBuild
         displayName: "Security Scan"
+
         steps:
-          # -------------- TFLINT ------------------------>
-          #  Installing TFLint from github and unzipping the file and paste it in local bin folder.
+
+          # ======================================================
+          # TFLINT
+          # ======================================================
+
           - script: |
               TFLINT_VERSION=v0.59.1
+
               curl -Lo tflint.zip https://github.com/terraform-linters/tflint/releases/download/${TFLINT_VERSION}/tflint_linux_amd64.zip
-              unzip tflint.zip
+
+              unzip -o tflint.zip
+
               sudo mv tflint /usr/local/bin/
+
               tflint --version
-            displayName: "TF Install"
-          # Intializing TFLint in working directory
+            displayName: "Install TFLint"
+
+
+          # ------------------------------------------------------
+          # Initialize TFLint
+          # ------------------------------------------------------
           - script: |
               cd "$(System.DefaultWorkingDirectory)"
+
               tflint --init
             displayName: "Initialize TFLint"
-          #  Running TF Lint
+
+
+          # ------------------------------------------------------
+          # Run TFLint
+          # ------------------------------------------------------
           - script: |
               cd "$(System.DefaultWorkingDirectory)/Parent Module"
+
               tflint --recursive
             displayName: "Run TFLint"
 
-          # ---------------- cHECKOV ------------------>
-          # Installing TFsec from github and unzipping the file and paste it in local bin folder
+
+          # ======================================================
+          # CHECKOV
+          # ======================================================
+
           - script: |
               python3 -m pip install --upgrade pip
+
               pip3 install checkov
             displayName: "Install Checkov"
-          # Verifying Version
+
+
+          # ------------------------------------------------------
+          # Verify Checkov
+          # ------------------------------------------------------
           - script: |
               checkov --version
             displayName: "Verify Checkov"
-          # Running Checkov
+
+
+          # ------------------------------------------------------
+          # Run Checkov
+          # ------------------------------------------------------
           - script: |
               cd "$(System.DefaultWorkingDirectory)/Parent Module"
+
               checkov -d .
             displayName: "Run Checkov"
 
-          #  ----------------Trivy -----------------------> (IaC + Vulnerability)
-          # Installing Trivy in Local Agent
+
+          # ======================================================
+          # TRIVY
+          # ======================================================
+
           - script: |
               TRIVY_VERSION=0.65.0
+
               wget https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz
+
               tar -xzf trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz
+
               sudo mv trivy /usr/local/bin/
+
               trivy --version
             displayName: "Install Trivy"
-          #  Verify Its installed or not
+
+
+          # ------------------------------------------------------
+          # Verify Trivy
+          # ------------------------------------------------------
           - script: |
               trivy --version
             displayName: "Verify Trivy"
-          #  Run Trivy for code Checking
+
+
+          # ------------------------------------------------------
+          # Run Trivy
+          # ------------------------------------------------------
           - script: |
               cd "$(System.DefaultWorkingDirectory)/Parent Module"
+
               trivy config .
             displayName: "Run Trivy"
 
-          # -----------------TruffleHog ------------------> (Secrets)
-          # Installing TruffleHog in Local Agent
+
+          # ======================================================
+          # TRUFFLEHOG
+          # ======================================================
+
           - script: |
               TRUFFLEHOG_VERSION=3.90.2
+
               curl -Lo trufflehog.tar.gz https://github.com/trufflesecurity/trufflehog/releases/download/v${TRUFFLEHOG_VERSION}/trufflehog_${TRUFFLEHOG_VERSION}_linux_amd64.tar.gz
+
               tar -xzf trufflehog.tar.gz
+
               sudo mv trufflehog /usr/local/bin/
+
               trufflehog --version
             displayName: "Install TruffleHog"
-          #  Verify Its installed or not
+
+
+          # ------------------------------------------------------
+          # Verify TruffleHog
+          # ------------------------------------------------------
           - script: |
               trufflehog --version
             displayName: "Verify TruffleHog"
-          #  Run TruffleHog for code Checking
+
+
+          # ------------------------------------------------------
+          # Run TruffleHog
+          # ------------------------------------------------------
           - script: |
               cd "$(System.DefaultWorkingDirectory)/Parent Module"
+
               trufflehog filesystem .
             displayName: "Run TruffleHog"
