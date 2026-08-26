@@ -4,22 +4,244 @@ pool:
   vmImage: ubuntu-latest
 
 stages:
+
+  # ============================================================
+  # BUILD STAGE - CI
+  # ============================================================
   - stage: Build
-    displayName: "Build Stage"
+    displayName: "Terraform Build"
 
     jobs:
 
+      # ========================================================
+      # TERRAFORM BUILD JOB
+      # ========================================================
       - job: TerraformBuild
         displayName: "Terraform Job"
 
         steps:
 
+          # ----------------------------------------------------
+          # Install Terraform
+          # No TerraformInstaller@1 dependency
+          # ----------------------------------------------------
+          - bash: |
+              set -e
+
+              TERRAFORM_VERSION="1.9.8"
+
+              wget -q \
+                https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip
+
+              unzip -o terraform_${TERRAFORM_VERSION}_linux_amd64.zip
+
+              sudo mv terraform /usr/local/bin/terraform
+
+              terraform version
+            displayName: "Install Terraform"
+
+
+          # ----------------------------------------------------
+          # Terraform Format
+          # ----------------------------------------------------
+          - bash: |
+              cd "$(System.DefaultWorkingDirectory)/Parent Module"
+
+              terraform fmt -check -recursive
+            displayName: "Terraform Format Checking"
+
+
+          # ----------------------------------------------------
+          # Terraform Init
+          # AzureCLI logs in using Service Connection
+          # ----------------------------------------------------
           - task: AzureCLI@2
-            displayName: "Test Azure Authentication"
+            displayName: "Terraform Init"
             inputs:
               azureSubscription: "service-connection-ado-pipeline"
-              scriptType: bash
-              scriptLocation: inlineScript
+              scriptType: "bash"
+              scriptLocation: "inlineScript"
               inlineScript: |
-                az account show
-                az account get-access-token --resource https://management.azure.com/
+
+                cd "$(System.DefaultWorkingDirectory)/Parent Module"
+
+                echo "Current Directory:"
+                pwd
+
+                echo "Terraform Version:"
+                terraform version
+
+                echo "Terraform Files:"
+                ls -la
+
+                terraform init \
+                  -backend-config="storage_account_name=pipelinestorageaccount12" \
+                  -backend-config="container_name=statefile" \
+                  -backend-config="key=tfstate"
+
+
+          # ----------------------------------------------------
+          # Terraform Validate
+          # ----------------------------------------------------
+          - task: AzureCLI@2
+            displayName: "Terraform Validate"
+            inputs:
+              azureSubscription: "service-connection-ado-pipeline"
+              scriptType: "bash"
+              scriptLocation: "inlineScript"
+              inlineScript: |
+
+                cd "$(System.DefaultWorkingDirectory)/Parent Module"
+
+                terraform validate
+
+
+          # ----------------------------------------------------
+          # Terraform Plan
+          # ----------------------------------------------------
+          - task: AzureCLI@2
+            displayName: "Terraform Plan"
+            inputs:
+              azureSubscription: "service-connection-ado-pipeline"
+              scriptType: "bash"
+              scriptLocation: "inlineScript"
+              inlineScript: |
+
+                cd "$(System.DefaultWorkingDirectory)/Parent Module"
+
+                terraform plan -out=tfplan
+
+
+          # ----------------------------------------------------
+          # Publish Terraform Plan
+          # ----------------------------------------------------
+          - task: PublishPipelineArtifact@1
+            displayName: "Publishing Terraform Plan"
+            inputs:
+              targetPath: "$(System.DefaultWorkingDirectory)/Parent Module/tfplan"
+              artifact: "TerraformPlan"
+              publishLocation: "pipeline"
+
+
+      # ========================================================
+      # SECURITY JOB
+      # ========================================================
+      - job: Security
+        dependsOn: TerraformBuild
+        displayName: "Security Scan"
+
+        steps:
+
+          # ====================================================
+          # TFLINT
+          # ====================================================
+
+          - script: |
+              TFLINT_VERSION=v0.59.1
+
+              curl -Lo tflint.zip \
+                https://github.com/terraform-linters/tflint/releases/download/${TFLINT_VERSION}/tflint_linux_amd64.zip
+
+              unzip -o tflint.zip
+
+              sudo mv tflint /usr/local/bin/
+
+              tflint --version
+            displayName: "Install TFLint"
+
+
+          - script: |
+              cd "$(System.DefaultWorkingDirectory)"
+
+              tflint --init
+            displayName: "Initialize TFLint"
+
+
+          - script: |
+              cd "$(System.DefaultWorkingDirectory)/Parent Module"
+
+              tflint --recursive
+            displayName: "Run TFLint"
+
+
+          # ====================================================
+          # CHECKOV
+          # ====================================================
+
+          - script: |
+              python3 -m pip install --upgrade pip
+
+              pip3 install checkov
+            displayName: "Install Checkov"
+
+
+          - script: |
+              checkov --version
+            displayName: "Verify Checkov"
+
+
+          - script: |
+              cd "$(System.DefaultWorkingDirectory)/Parent Module"
+
+              checkov -d .
+            displayName: "Run Checkov"
+
+
+          # ====================================================
+          # TRIVY
+          # ====================================================
+
+          - script: |
+              TRIVY_VERSION=0.65.0
+
+              wget \
+                https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz
+
+              tar -xzf trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz
+
+              sudo mv trivy /usr/local/bin/
+
+              trivy --version
+            displayName: "Install Trivy"
+
+
+          - script: |
+              trivy --version
+            displayName: "Verify Trivy"
+
+
+          - script: |
+              cd "$(System.DefaultWorkingDirectory)/Parent Module"
+
+              trivy config .
+            displayName: "Run Trivy"
+
+
+          # ====================================================
+          # TRUFFLEHOG
+          # ====================================================
+
+          - script: |
+              TRUFFLEHOG_VERSION=3.90.2
+
+              curl -Lo trufflehog.tar.gz \
+                https://github.com/trufflesecurity/trufflehog/releases/download/v${TRUFFLEHOG_VERSION}/trufflehog_${TRUFFLEHOG_VERSION}_linux_amd64.tar.gz
+
+              tar -xzf trufflehog.tar.gz
+
+              sudo mv trufflehog /usr/local/bin/
+
+              trufflehog --version
+            displayName: "Install TruffleHog"
+
+
+          - script: |
+              trufflehog --version
+            displayName: "Verify TruffleHog"
+
+
+          - script: |
+              cd "$(System.DefaultWorkingDirectory)/Parent Module"
+
+              trufflehog filesystem .
+            displayName: "Run TruffleHog"
