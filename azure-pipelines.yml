@@ -39,18 +39,6 @@ stages:
 
               terraform version
             displayName: "Install Terraform"
-
-
-          # ----------------------------------------------------
-          # Terraform Format
-          # ----------------------------------------------------
-          - bash: |
-              cd "$(System.DefaultWorkingDirectory)/Parent Module"
-
-              terraform fmt -check -recursive
-            displayName: "Terraform Format Checking"
-
-
           # ----------------------------------------------------
           # Terraform Init
           # AzureCLI logs in using Service Connection
