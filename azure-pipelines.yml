@@ -95,7 +95,10 @@ stages:
               steps:
                 - checkout: self
                   displayName: 'Checkout Repository Code Base'
-                
+                - task: TerraformInstaller@1
+                  displayName: 'Install Terraform CLI'
+                  inputs:
+                    terraformVersion: 'latest'
                 # Download the immutable plan generated during the CI stage
                 - download: current
                   artifact: tfplan
