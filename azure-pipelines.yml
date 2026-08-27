@@ -34,8 +34,12 @@ stages:
                # 2. Create the storage account
                az storage account create --name sttfstatebackend --resource-group rg-terraform-mgmt --sku Standard_LRS --encryption-services blob
           
-               # 3. Create the container for the tfstate file
-               az storage container create --name tfstate --account-name sttfstatebackend    
+               # 3. Retrieve the freshly generated storage account key
+               echo "Retrieving storage account connection string..."
+               ACCOUNT_KEY=$(az storage account keys list --resource-group rg-terraform-mgmt --account-name sttfstatebackend --query "[0].value" --output tsv)
+          
+               # 4. Create the container securely using the account key
+               az storage container create --name tfstate --account-name sttfstatebackend --account-key $ACCOUNT_KEY    
 
 
 
