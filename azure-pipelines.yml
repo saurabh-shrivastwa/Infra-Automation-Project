@@ -134,3 +134,20 @@ stages:
                     workingDirectory: '$(workingDirectory)'
                     commandOptions: '$(Pipeline.Workspace)/tfplan/tfplan -auto-approve -input=false'
                     environmentServiceNameAzureRM: '$(azureServiceConnection)'
+                - script: |
+                    echo "Checking downloaded plan location..."
+                    # Find the exact path where the artifact file landed
+                    PLAN_PATH=$(find $(Pipeline.Workspace)/tfplan -type f -name "tfplan" | head -n 1)
+                    
+                    if [ -z "$PLAN_PATH" ]; then
+                      echo "##[error] Could not find the tfplan file anywhere in the workspace!"
+                      exit 1
+                    fi
+                    
+                    echo "Found plan file at: $PLAN_PATH"
+                    echo "Executing Terraform Apply..."
+                    
+                    # Run the raw apply command safely without task wrappers
+                    terraform apply -auto-approve -input=false "$PLAN_PATH"
+                  displayName: 'Terraform Apply (Native Bash Execution)'
+                  workingDirectory: '$(workingDirectory)'
