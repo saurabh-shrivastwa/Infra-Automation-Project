@@ -25,9 +25,13 @@ subnets = {
   subnet1 = {
     name             = "dev-frontend-subnet01"
     address_prefixes = ["10.0.1.0/24"]
+    resource_group_name = "pipeline-testing"
+    virtual_network_name = "dev-vnet01"
   }
   subnet2 = {
     name             = "dev-frontend-subnet02"
     address_prefixes = ["10.0.1.0/24"]
+    resource_group_name = "pipeline-testing"
+    virtual_network_name = "dev-vnet01"
   }
 }
