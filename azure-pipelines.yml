@@ -8,6 +8,15 @@ pr:
     include:
       - main
 
+variables:
+  # CHANGE THESE: Update with your exact Azure Portal values
+  azureServiceConnection: 'service-connection-ado-pipeline'
+  backendRG: 'pipeline-testing'
+  backendStorage: 'sttfstatebackend123'
+  backendContainer: 'tfstate'
+  backendKey: 'terraform.tfstate'
+  workingDirectory: '$(System.DefaultWorkingDirectory)'
+
 pool:
   vmImage: 'ubuntu-latest'
 
@@ -18,41 +27,109 @@ stages:
   - stage: CI_Validation
     displayName: 'CI - Lint, Validate & Plan'
     jobs:
-      - job: Bootstrap_Backend
-        displayName: 'One-Time Storage Creation'
+      - job: Terraform_CI
+        displayName: 'Terraform Code Quality and Planning'
         steps:
-          - task: AzureCLI@2
-            displayName: 'Create Azure Backend Infrastructure'
+          # Install the latest version of Terraform CLI on the runner
+          - task: TerraformInstaller@1
+            displayName: 'Install Terraform'
             inputs:
-             azureSubscription: 'service-connection-ado-pipeline' # Your Service Connection Name
-             scriptType: 'bash'
-             scriptLocation: 'inlineScript'
-             inlineScript: |
-               # 1. Create management resource group
-               az group create --name rg-terraform-mgmt --location eastus
-          
-               # 2. Create the storage account
-               az storage account create --name sttfstatebackend --resource-group rg-terraform-mgmt --sku Standard_LRS --encryption-services blob
-          
-               # 3. Retrieve the freshly generated storage account key
-               echo "Waiting for storage account to stabilize..."
-               for i in {1..6}; do
-               az storage account show --name sttfstatebackend --resource-group rg-terraform-mgmt &>/dev/null && break
-               echo "Storage account not ready yet, retrying in 10 seconds... ($i/6)"
-               sleep 10
-               done
-          
-               # 4. Create the container securely using the account key
-               az storage container create --name tfstate --account-name sttfstatebackend --auth-mode login
+              terraformVersion: 'latest'
 
+          # Check syntax formatting (Fails if your .tf files are unformatted)
+          - script: terraform fmt -check
+            displayName: 'Terraform Fmt Check'
+            workingDirectory: $(workingDirectory)
 
+          # Initialize working directory and backend state using your Azure Service Connection
+          - task: TerraformTaskV4@4
+            displayName: 'Terraform Init'
+            inputs:
+              provider: 'azurerm'
+              command: 'init'
+              workingDirectory: '$(workingDirectory)'
+              backendServiceArm: '$(azureServiceConnection)'
+              backendAzureRmResourceGroupName: '$(backendRG)'
+              backendAzureRmStorageAccountName: '$(backendStorage)'
+              backendAzureRmContainerName: '$(backendContainer)'
+              backendAzureRmKey: '$(backendKey)'
 
+          # Validate syntax and structural code configuration
+          - task: TerraformTaskV4@4
+            displayName: 'Terraform Validate'
+            inputs:
+              provider: 'azurerm'
+              command: 'validate'
+              workingDirectory: '$(workingDirectory)'
 
+          # Generate dry-run plan file and save it to the runner workspace
+          - task: TerraformTaskV4@4
+            displayName: 'Terraform Plan'
+            inputs:
+              provider: 'azurerm'
+              command: 'plan'
+              workingDirectory: '$(workingDirectory)'
+              commandOptions: '-out=$(Pipeline.Workspace)/tfplan -input=false'
+              environmentServiceNameAzureRM: '$(azureServiceConnection)'
 
+          # Publish the plan binary so the CD stage can safely consume it
+          - publish: $(Pipeline.Workspace)/tfplan
+            artifact: tfplan
+            displayName: 'Publish Terraform Plan Artifact'
 
+  # ==========================================
+  # CD STAGE: Runs ONLY on Main Branch Commits
+  # ==========================================
+  - stage: CD_Deployment
+    displayName: 'CD - Deploy Infrastructure'
+    dependsOn: CI_Validation
+    # Only executes deployment when code changes are safely merged into the main branch
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    jobs:
+      - deployment: Terraform_CD
+        displayName: 'Terraform Apply'
+        environment: 'Production' # Connects to Azure DevOps Environment Gates for approvals
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - task: TerraformInstaller@1
+                  displayName: 'Install Terraform'
+                  inputs:
+                    terraformVersion: 'latest'
 
+                # Download the immutable plan generated during the CI stage
+                - download: current
+                  artifact: tfplan
+                  displayName: 'Download Terraform Plan'
 
+                # Re-initialize backend configuration for the deployment agent
+                - task: TerraformTaskV4@4
+                  displayName: 'Terraform Init'
+                  inputs:
+                    provider: 'azurerm'
+                    command: 'init'
+                    workingDirectory: '$(workingDirectory)'
+                    backendServiceArm: '$(azureServiceConnection)'
+                    backendAzureRmResourceGroupName: '$(backendRG)'
+                    backendAzureRmStorageAccountName: '$(backendStorage)'
+                    backendAzureRmContainerName: '$(backendContainer)'
+                    backendAzureRmKey: '$(backendKey)'
 
+                # Re-verify configuration layout before deploying 
+                - task: TerraformTaskV4@4
+                  displayName: 'Terraform Validate'
+                  inputs:
+                    provider: 'azurerm'
+                    command: 'validate'
+                    workingDirectory: '$(workingDirectory)'
 
-
-
+                # Execute deployment changes securely using the immutable plan artifact
+                - task: TerraformTaskV4@4
+                  displayName: 'Terraform Apply'
+                  inputs:
+                    provider: 'azurerm'
+                    command: 'apply'
+                    workingDirectory: '$(workingDirectory)'
+                    commandOptions: '$(Pipeline.Workspace)/tfplan/tfplan -auto-approve -input=false'
+                    environmentServiceNameAzureRM: '$(azureServiceConnection)'
