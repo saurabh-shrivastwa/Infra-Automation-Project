@@ -37,7 +37,7 @@ stages:
               terraformVersion: 'latest'
 
           # Check syntax formatting (Fails if your .tf files are unformatted)
-          - script: terraform fmt -check
+          - script: terraform fmt -recursive
             displayName: 'Terraform Fmt Check'
             workingDirectory: $(workingDirectory)
 
