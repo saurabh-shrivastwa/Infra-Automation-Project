@@ -15,7 +15,7 @@ variables:
   backendStorage: 'sttfstatebackend123'
   backendContainer: 'tfstate'
   backendKey: 'terraform.tfstate'
-  workingDirectory: '$(System.DefaultWorkingDirectory)/terraform'
+  workingDirectory: '$(System.DefaultWorkingDirectory)/environment/dev'
 
 pool:
   vmImage: 'ubuntu-latest'
