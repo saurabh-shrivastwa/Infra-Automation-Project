@@ -1,109 +1,50 @@
-trigger: none
+trigger:
+  branches:
+    include:
+      - main
+
+pr:
+  branches:
+    include:
+      - main
 
 pool:
-  vmImage: ubuntu-latest
+  vmImage: 'ubuntu-latest'
 
 stages:
-
-- stage: Build
-  displayName: "Terraform Build"
-
-  jobs:
-
-  - job: TerraformBuild
-    displayName: "Terraform Job"
-
-    steps:
-
-    # ==========================================================
-    # Install Terraform
-    # ==========================================================
-    - bash: |
-        set -e
-
-        TERRAFORM_VERSION="1.9.8"
-
-        wget -q https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip
-
-        unzip -o terraform_${TERRAFORM_VERSION}_linux_amd64.zip
-
-        sudo mv terraform /usr/local/bin/terraform
-
-        terraform version
-      displayName: "Install Terraform"
+  # ==========================================
+  # CI STAGE: Runs on PRs and Main Branch Commits
+  # ==========================================
+  - stage: CI_Validation
+    displayName: 'CI - Lint, Validate & Plan'
+    jobs:
+      - job: Bootstrap_Backend
+        displayName: 'One-Time Storage Creation'
+        steps:
+          - task: AzureCLI@2
+            displayName: 'Create Azure Backend Infrastructure'
+            inputs:
+             azureSubscription: 'service-connection-ado-pipeline' # Your Service Connection Name
+             scriptType: 'bash'
+             scriptLocation: 'inlineScript'
+             inlineScript: |
+               # 1. Create management resource group
+               az group create --name rg-terraform-mgmt --location eastus
+          
+               # 2. Create the storage account
+               az storage account create --name sttfstatebackend --resource-group rg-terraform-mgmt --sku Standard_LRS --encryption-services blob
+          
+               # 3. Create the container for the tfstate file
+               az storage container create --name tfstate --account-name sttfstatebackend    
 
 
-    # ==========================================================
-    # Terraform Init
-    # ==========================================================
-    - task: AzureCLI@2
-      displayName: "Terraform Init"
-      inputs:
-        azureSubscription: "service-connection-ado-pipeline"
-        scriptType: bash
-        scriptLocation: inlineScript
-        inlineScript: |
-
-          set -e
-
-          cd "$(System.DefaultWorkingDirectory)"
-
-          echo "Terraform working directory:"
-          pwd
-
-          echo "Terraform files:"
-          ls -la
-
-          terraform version
-
-          terraform init \
-            -backend-config="storage_account_name=pipelinestorageaccount12" \
-            -backend-config="container_name=statefile" \
-            -backend-config="key=tfstate"
 
 
-    # ==========================================================
-    # Terraform Validate
-    # ==========================================================
-    - task: AzureCLI@2
-      displayName: "Terraform Validate"
-      inputs:
-        azureSubscription: "service-connection-ado-pipeline"
-        scriptType: bash
-        scriptLocation: inlineScript
-        inlineScript: |
-
-          set -e
-
-          cd "$(System.DefaultWorkingDirectory)"
-
-          terraform validate
 
 
-    # ==========================================================
-    # Terraform Plan
-    # ==========================================================
-    - task: AzureCLI@2
-      displayName: "Terraform Plan"
-      inputs:
-        azureSubscription: "service-connection-ado-pipeline"
-        scriptType: bash
-        scriptLocation: inlineScript
-        inlineScript: |
-
-          set -e
-
-          cd "$(System.DefaultWorkingDirectory)"
-
-          terraform plan -out=tfplan
 
 
-    # ==========================================================
-    # Publish Terraform Plan
-    # ==========================================================
-    - task: PublishPipelineArtifact@1
-      displayName: "Publishing Terraform Plan"
-      inputs:
-        targetPath: "$(System.DefaultWorkingDirectory)/tfplan"
-        artifact: "TerraformPlan"
-        publishLocation: "pipeline"
+
+
+
+
