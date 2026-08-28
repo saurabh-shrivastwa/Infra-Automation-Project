@@ -204,6 +204,9 @@ stages:
         addSpnToEnvironment: true
 
         inlineScript: |
+
+          cd "$(terraformWorkingDirectory)"
+
           export ARM_CLIENT_ID="$servicePrincipalId"
           export ARM_CLIENT_SECRET="$servicePrincipalKey"
           export ARM_TENANT_ID="$tenantId"
@@ -211,6 +214,7 @@ stages:
 
           terraform plan \
             -out="$(Build.ArtifactStagingDirectory)/tfplan"
+
 
 
     # --------------------------------------------------------
