@@ -8,8 +8,9 @@ pr:
   - main
 
 variables:
+  # CRITICAL: Replace this string with your actual Azure DevOps Service Connection Name
   - name: azureServiceConnection
-    value: 'service-connection-ado-pipeline' # Replace with your ADO Service Connection Name
+    value: 'service-connection-ado-pipeline' 
   - name: resourceGroup
     value: 'pipeline-testing'
   - name: storageAccount
@@ -30,30 +31,35 @@ stages:
         pool:
           vmImage: 'ubuntu-latest'
         steps:
-          # 1. Install Dependencies
-          - task: TerraformInstaller@1
-            displayName: 'Install Terraform'
-            inputs:
-              terraformVersion: $(terraformVersion)
-
+          # 1. Install & Cache Tooling (Native Scripting Engine)
           - script: |
-              curl -s https://githubusercontent.com | bash
+              set -e
+              # Install TFLint
+              curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash
+              
+              # Install TFSec
+              curl -s https://raw.githubusercontent.com/aquasecurity/tfsec/master/scripts/install_linux.sh | bash
+              
+              # Install Gitleaks via exact binary release to prevent URL redirection failures
               wget https://github.com
-              chmod +x tfsec-linux-amd64
-              sudo mv tfsec-linux-amd64 /usr/local/bin/tfsec
-              wget https://github.com
-              tar -zxvf gitleaks_linux_x64.tar.gz
+              tar -xzf gitleaks_8.18.2_linux_x64.tar.gz
+              chmod +x gitleaks
               sudo mv gitleaks /usr/local/bin/gitleaks
             displayName: 'Install TFLint, TFSec, and Gitleaks'
 
-          # 2. Secret & Security Scanning
+          # 2. Shift-Left Security Scans
           - script: gitleaks detect --source=. --verbose
             displayName: 'Run Gitleaks Secret Scan'
 
           - script: tfsec .
             displayName: 'Run TFSec Static Code Analysis'
 
-          # 3. Code Quality & Format Checks
+          # 3. Initialize & Quality Checks
+          - task: TerraformInstaller@1
+            displayName: 'Install Terraform'
+            inputs:
+              terraformVersion: $(terraformVersion)
+
           - task: TerraformTaskV4@4
             displayName: 'Terraform Init'
             inputs:
@@ -77,7 +83,7 @@ stages:
           - script: tflint --init && tflint
             displayName: 'Run TFLint Analysis'
 
-          # 4. Speculative Plan & Artifact Archival
+          # 4. Plan and Archive Binary
           - task: TerraformTaskV4@4
             displayName: 'Terraform Plan'
             inputs:
@@ -102,12 +108,12 @@ stages:
         displayName: 'Deploy Terraform Changes'
         pool:
           vmImage: 'ubuntu-latest'
-        environment: 'Production' # Enables manual approvals and gates in Azure Pipelines
+        environment: 'Production' 
         strategy:
           runOnce:
             deploy:
               steps:
-                # 1. Download Plan from CI Stage
+                # 1. Fetch Immutable Plan Artifact
                 - task: DownloadBuildArtifacts@1
                   displayName: 'Download Plan Artifact'
                   inputs:
@@ -116,23 +122,23 @@ stages:
                     artifactName: 'drop'
                     downloadPath: '$(System.ArtifactsDirectory)'
 
-                # 2. Re-Install Tools
+                # 2. Re-Install Security Core Tools
                 - task: TerraformInstaller@1
                   displayName: 'Install Terraform'
                   inputs:
                     terraformVersion: $(terraformVersion)
 
                 - script: |
-                    curl -s https://githubusercontent.com | bash
+                    set -e
+                    curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash
+                    curl -s https://raw.githubusercontent.com/aquasecurity/tfsec/master/scripts/install_linux.sh | bash
                     wget https://github.com
-                    chmod +x tfsec-linux-amd64
-                    sudo mv tfsec-linux-amd64 /usr/local/bin/tfsec
-                    wget https://github.com
-                    tar -zxvf gitleaks_linux_x64.tar.gz
+                    tar -xzf gitleaks_8.18.2_linux_x64.tar.gz
+                    chmod +x gitleaks
                     sudo mv gitleaks /usr/local/bin/gitleaks
                   displayName: 'Install TFLint, TFSec, and Gitleaks'
 
-                # 3. Run Verification Scans Again (Immutable Best Practice)
+                # 3. Post-Artifact Security Verification
                 - script: gitleaks detect --source=. --verbose
                   displayName: 'Run Gitleaks Secret Scan'
 
@@ -162,14 +168,7 @@ stages:
                 - script: tflint --init && tflint
                   displayName: 'Run TFLint Analysis'
 
-                # 4. Generate Confirmatory Plan and Execute Auto-Approve
-                - task: TerraformTaskV4@4
-                  displayName: 'Terraform Plan'
-                  inputs:
-                    provider: 'azurerm'
-                    command: 'plan'
-                    environmentServiceNameAzureRM: $(azureServiceConnection)
-
+                # 4. Target Execution using Pre-Compiled Binary
                 - task: TerraformTaskV4@4
                   displayName: 'Terraform Apply'
                   inputs:
