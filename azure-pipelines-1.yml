@@ -160,10 +160,7 @@ stages:
                   displayName: 'Run TFLint Analysis'
 
                 # 4. Target Execution using Pre-Compiled Binary
-                - task: TerraformTaskV4@4
-                  displayName: 'Terraform Apply'
-                  inputs:
-                    provider: 'azurerm'
-                    command: 'apply'
-                    environmentServiceNameAzureRM: $(azureServiceConnection)
-                    commandOptions: '-auto-approve $(System.ArtifactsDirectory)/drop/tfplan'
+                - script: |
+                    terraform apply -auto-approve "$(System.ArtifactsDirectory)/drop/tfplan"
+                  workingDirectory: '$(Build.SourcesDirectory)'
+                  displayName: 'Terraform Apply (Execute Planned Binary File)'
