@@ -31,30 +31,23 @@ stages:
         pool:
           vmImage: 'ubuntu-latest'
         steps:
-          # 1. Install & Cache Third-Party Security Tooling via Explicit Binary Targets
+          # 1. Install TFLint (Using official, reliable script)
           - script: |
               set -e
-              # Install TFLint
               curl -s https://githubusercontent.com | bash
-              
-              # Install TFSec
-              curl -s https://githubusercontent.com | bash
-              
-              # Install Gitleaks using the explicit GitHub Release redirect-less download URL
-              curl -sSL -o gitleaks.tar.gz "https://github.com"
-              tar -xzf gitleaks.tar.gz
-              chmod +x gitleaks
-              sudo mv gitleaks /usr/local/bin/gitleaks
-            displayName: 'Install TFLint, TFSec, and Gitleaks'
+            displayName: 'Install TFLint'
 
-          # 2. Shift-Left Security Scans
-          - script: gitleaks detect --source=. --verbose
+          # 2. Run Gitleaks via official Docker container (No downloads, no errors)
+          - script: |
+              docker run --rm -v $(Build.SourcesDirectory):/path zricethezav/gitleaks:latest detect --source=/path --verbose
             displayName: 'Run Gitleaks Secret Scan'
 
-          - script: tfsec .
+          # 3. Run TFSec via official Docker container (No downloads, no errors)
+          - script: |
+              docker run --rm -v $(Build.SourcesDirectory):/apps aquasec/tfsec /apps
             displayName: 'Run TFSec Static Code Analysis'
 
-          # 3. Initialize & Quality Checks
+          # 4. Initialize Terraform
           - task: TerraformInstaller@1
             displayName: 'Install Terraform'
             inputs:
@@ -71,6 +64,7 @@ stages:
               backendAzureRmContainerName: $(containerName)
               backendAzureRmKey: $(tfstateKey)
 
+          # 5. Format & Validate Checks
           - script: terraform fmt -check
             displayName: 'Verify Terraform Formatting'
 
@@ -83,7 +77,7 @@ stages:
           - script: tflint --init && tflint
             displayName: 'Run TFLint Analysis'
 
-          # 4. Plan and Archive Binary
+          # 6. Plan and Archive Binary
           - task: TerraformTaskV4@4
             displayName: 'Terraform Plan'
             inputs:
@@ -131,18 +125,15 @@ stages:
                 - script: |
                     set -e
                     curl -s https://githubusercontent.com | bash
-                    curl -s https://githubusercontent.com | bash
-                    curl -sSL -o gitleaks.tar.gz "https://github.com"
-                    tar -xzf gitleaks.tar.gz
-                    chmod +x gitleaks
-                    sudo mv gitleaks /usr/local/bin/gitleaks
-                  displayName: 'Install TFLint, TFSec, and Gitleaks'
+                  displayName: 'Install TFLint'
 
-                # 3. Post-Artifact Security Verification
-                - script: gitleaks detect --source=. --verbose
+                # 3. Post-Artifact Security Verification (Docker based)
+                - script: |
+                    docker run --rm -v $(Build.SourcesDirectory):/path zricethezav/gitleaks:latest detect --source=/path --verbose
                   displayName: 'Run Gitleaks Secret Scan'
 
-                - script: tfsec .
+                - script: |
+                    docker run --rm -v $(Build.SourcesDirectory):/apps aquasec/tfsec /apps
                   displayName: 'Run TFSec Static Code Analysis'
 
                 - task: TerraformTaskV4@4
