@@ -8,23 +8,24 @@ pr:
     include:
       - main
 
-
 variables:
-  terraformVersion: '4.80.0'
-  workingDirectory: '$(System.DefaultWorkingDirectory)'
+  terraformVersion: '1.9.8'
 
-  # Azure Backend
+  # Azure DevOps Service Connection
+  azureServiceConnection: 'service-connection-ado-pipeline'
+
+  # Terraform Backend
   backendResourceGroup: 'pipeline-testing'
   backendStorageAccount: 'sttfstatebackend123'
   backendContainer: 'tfstate'
   backendKey: 'terraform.tfstate'
 
 
-stages:
-
 # ============================================================
 # CI STAGE
 # ============================================================
+
+stages:
 
 - stage: CI
   displayName: 'Terraform CI'
@@ -47,14 +48,17 @@ stages:
       clean: true
       fetchDepth: 0
 
+
     # --------------------------------------------------------
     # Install Terraform
     # --------------------------------------------------------
 
     - task: TerraformInstaller@1
       displayName: 'Install Terraform'
+
       inputs:
         terraformVersion: '$(terraformVersion)'
+
 
     # --------------------------------------------------------
     # Terraform Version
@@ -71,13 +75,14 @@ stages:
 
     - task: AzureCLI@2
       displayName: 'Terraform Init'
+
       inputs:
-        azureSubscription: 'service-connection-ado-pipeline'
+        azureSubscription: '$(azureServiceConnection)'
         scriptType: 'bash'
         scriptLocation: 'inlineScript'
         addSpnToEnvironment: true
-        inlineScript: |
 
+        inlineScript: |
           export ARM_CLIENT_ID="$servicePrincipalId"
           export ARM_CLIENT_SECRET="$servicePrincipalKey"
           export ARM_TENANT_ID="$tenantId"
@@ -106,13 +111,14 @@ stages:
 
     - task: AzureCLI@2
       displayName: 'Terraform Validate'
+
       inputs:
-        azureSubscription: 'service-connection-ado-pipeline'
+        azureSubscription: '$(azureServiceConnection)'
         scriptType: 'bash'
         scriptLocation: 'inlineScript'
         addSpnToEnvironment: true
-        inlineScript: |
 
+        inlineScript: |
           export ARM_CLIENT_ID="$servicePrincipalId"
           export ARM_CLIENT_SECRET="$servicePrincipalKey"
           export ARM_TENANT_ID="$tenantId"
@@ -128,8 +134,7 @@ stages:
     - script: |
         set -e
 
-        curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh \
-          | bash
+        curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash
 
         tflint --version
       displayName: 'Install TFLint'
@@ -148,22 +153,31 @@ stages:
 
 
     # --------------------------------------------------------
+    # Install tfsec
+    # --------------------------------------------------------
+
+    - script: |
+        set -e
+
+        curl -s https://raw.githubusercontent.com/aquasecurity/tfsec/master/scripts/install_linux.sh | bash
+
+        tfsec --version
+      displayName: 'Install tfsec'
+
+
+    # --------------------------------------------------------
     # Run tfsec
     # --------------------------------------------------------
 
     - script: |
         set -e
 
-        curl -s https://raw.githubusercontent.com/aquasecurity/tfsec/master/scripts/install_linux.sh \
-          | bash
-
-        tfsec --version
         tfsec .
       displayName: 'Run tfsec'
 
 
     # --------------------------------------------------------
-    # Run Gitleaks
+    # Install Gitleaks
     # --------------------------------------------------------
 
     - script: |
@@ -180,6 +194,15 @@ stages:
         sudo mv gitleaks /usr/local/bin/gitleaks
 
         gitleaks version
+      displayName: 'Install Gitleaks'
+
+
+    # --------------------------------------------------------
+    # Run Gitleaks
+    # --------------------------------------------------------
+
+    - script: |
+        set -e
 
         gitleaks detect \
           --source . \
@@ -194,13 +217,14 @@ stages:
 
     - task: AzureCLI@2
       displayName: 'Terraform Plan'
+
       inputs:
-        azureSubscription: 'service-connection-ado-pipeline'
+        azureSubscription: '$(azureServiceConnection)'
         scriptType: 'bash'
         scriptLocation: 'inlineScript'
         addSpnToEnvironment: true
-        inlineScript: |
 
+        inlineScript: |
           export ARM_CLIENT_ID="$servicePrincipalId"
           export ARM_CLIENT_SECRET="$servicePrincipalKey"
           export ARM_TENANT_ID="$tenantId"
@@ -211,18 +235,19 @@ stages:
 
 
     # --------------------------------------------------------
-    # Convert Plan to Readable Text
+    # Create Readable Terraform Plan
     # --------------------------------------------------------
 
     - task: AzureCLI@2
       displayName: 'Create Terraform Plan Summary'
+
       inputs:
-        azureSubscription: 'service-connection-ado-pipeline'
+        azureSubscription: '$(azureServiceConnection)'
         scriptType: 'bash'
         scriptLocation: 'inlineScript'
         addSpnToEnvironment: true
-        inlineScript: |
 
+        inlineScript: |
           export ARM_CLIENT_ID="$servicePrincipalId"
           export ARM_CLIENT_SECRET="$servicePrincipalKey"
           export ARM_TENANT_ID="$tenantId"
@@ -240,6 +265,7 @@ stages:
 
     - task: PublishPipelineArtifact@1
       displayName: 'Publish Terraform Plan Artifact'
+
       inputs:
         targetPath: '$(Build.ArtifactStagingDirectory)'
         artifact: 'terraform-plan'
@@ -255,10 +281,7 @@ stages:
 
   dependsOn: CI
 
-  condition: and(
-    succeeded(),
-    eq(variables['Build.SourceBranch'], 'refs/heads/main')
-  )
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
 
   jobs:
 
@@ -272,7 +295,6 @@ stages:
 
     strategy:
       runOnce:
-
         deploy:
 
           steps:
@@ -292,16 +314,18 @@ stages:
 
           - task: TerraformInstaller@1
             displayName: 'Install Terraform'
+
             inputs:
               terraformVersion: '$(terraformVersion)'
 
 
           # --------------------------------------------------
-          # Download CI Plan Artifact
+          # Download Terraform Plan Artifact
           # --------------------------------------------------
 
           - task: DownloadPipelineArtifact@2
             displayName: 'Download Terraform Plan'
+
             inputs:
               buildType: 'current'
               artifactName: 'terraform-plan'
@@ -314,13 +338,14 @@ stages:
 
           - task: AzureCLI@2
             displayName: 'Terraform Init'
+
             inputs:
-              azureSubscription: 'service-connection-ado-pipeline'
+              azureSubscription: '$(azureServiceConnection)'
               scriptType: 'bash'
               scriptLocation: 'inlineScript'
               addSpnToEnvironment: true
-              inlineScript: |
 
+              inlineScript: |
                 export ARM_CLIENT_ID="$servicePrincipalId"
                 export ARM_CLIENT_SECRET="$servicePrincipalKey"
                 export ARM_TENANT_ID="$tenantId"
@@ -349,13 +374,14 @@ stages:
 
           - task: AzureCLI@2
             displayName: 'Terraform Validate'
+
             inputs:
-              azureSubscription: 'service-connection-ado-pipeline'
+              azureSubscription: '$(azureServiceConnection)'
               scriptType: 'bash'
               scriptLocation: 'inlineScript'
               addSpnToEnvironment: true
-              inlineScript: |
 
+              inlineScript: |
                 export ARM_CLIENT_ID="$servicePrincipalId"
                 export ARM_CLIENT_SECRET="$servicePrincipalKey"
                 export ARM_TENANT_ID="$tenantId"
@@ -371,8 +397,7 @@ stages:
           - script: |
               set -e
 
-              curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh \
-                | bash
+              curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash
 
               tflint --version
             displayName: 'Install TFLint'
@@ -391,22 +416,31 @@ stages:
 
 
           # --------------------------------------------------
+          # Install tfsec
+          # --------------------------------------------------
+
+          - script: |
+              set -e
+
+              curl -s https://raw.githubusercontent.com/aquasecurity/tfsec/master/scripts/install_linux.sh | bash
+
+              tfsec --version
+            displayName: 'Install tfsec'
+
+
+          # --------------------------------------------------
           # Run tfsec
           # --------------------------------------------------
 
           - script: |
               set -e
 
-              curl -s https://raw.githubusercontent.com/aquasecurity/tfsec/master/scripts/install_linux.sh \
-                | bash
-
-              tfsec --version
               tfsec .
             displayName: 'Run tfsec'
 
 
           # --------------------------------------------------
-          # Run Gitleaks
+          # Install Gitleaks
           # --------------------------------------------------
 
           - script: |
@@ -423,6 +457,15 @@ stages:
               sudo mv gitleaks /usr/local/bin/gitleaks
 
               gitleaks version
+            displayName: 'Install Gitleaks'
+
+
+          # --------------------------------------------------
+          # Run Gitleaks
+          # --------------------------------------------------
+
+          - script: |
+              set -e
 
               gitleaks detect \
                 --source . \
@@ -437,13 +480,14 @@ stages:
 
           - task: AzureCLI@2
             displayName: 'Terraform Apply'
+
             inputs:
-              azureSubscription: 'service-connection-ado-pipeline'
+              azureSubscription: '$(azureServiceConnection)'
               scriptType: 'bash'
               scriptLocation: 'inlineScript'
               addSpnToEnvironment: true
-              inlineScript: |
 
+              inlineScript: |
                 export ARM_CLIENT_ID="$servicePrincipalId"
                 export ARM_CLIENT_SECRET="$servicePrincipalKey"
                 export ARM_TENANT_ID="$tenantId"
