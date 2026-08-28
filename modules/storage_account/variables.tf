@@ -1,1 +1,3 @@
-variable "sas" {}
+variable "sas" {
+    type = "string"
+}
