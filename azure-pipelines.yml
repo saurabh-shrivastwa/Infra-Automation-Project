@@ -1,0 +1,17 @@
+trigger:
+  - main
+
+pool: 
+  vmImage: ubuntu
+
+stages:
+  - stage: 
+    jobs:
+      - job: TerraformInit
+        steps: TerraformInit
+        task: TerraformInit        
+
+                             
+
+
+ 
