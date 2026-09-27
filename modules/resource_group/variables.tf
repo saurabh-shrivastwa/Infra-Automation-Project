@@ -1,3 +1,0 @@
-variable "rgs" {
-    type = "string"
-}
