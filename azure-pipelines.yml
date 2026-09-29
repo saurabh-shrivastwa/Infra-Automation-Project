@@ -14,28 +14,21 @@ stages:
         - task: TerraformInstaller@1
           inputs:
             terraformVersion: '1.16.4'
-        - task: TerraformTask@5
+
+        - task: AzureCLI@2
+          displayName: 'Terraform Init Natively'
           inputs:
-            provider: 'azurerm'
-            command: 'init'
+            azureSubscription: 'sc-vistara-automation' 
+            scriptType: 'bash'
+            scriptLocation: 'inlineScript'
             workingDirectory: '$(System.DefaultWorkingDirectory)/Infra-Automation-Project/environment/dev'
-            backendServiceArm: 'sc-vistara-automation'
-            backendAzureRmOverrideSubscriptionID: '1a09cc15-f2cb-43ae-bfb9-05fc711f965c'
-            backendAzureRmResourceGroupName: 'vistara-automation'
-            backendAzureRmStorageAccountName: 'storagevistara999'
-            backendAzureRmContainerName: 'tfstate'
-            backendAzureRmKey: 'devtfstate'
-        - task: TerraformTask@5
-          inputs:
-            provider: 'azurerm'
-            command: 'init'
-            workingDirectory: '$(System.DefaultWorkingDirectory)/environment/dev'
-            backendServiceArm: 'sc-vistara-automation'
-            backendAzureRmOverrideSubscriptionID: '1a09cc15-f2cb-43ae-bfb9-05fc711f965c'
-            backendAzureRmResourceGroupName: 'vistara-automation'
-            backendAzureRmStorageAccountName: 'storagevistara999'
-            backendAzureRmContainerName: 'tfstate'
-            backendAzureRmKey: 'devtfstate'
+            inlineScript: |
+              terraform init \
+                -backend-config="storage_account_name=storagevistara999" \
+                -backend-config="container_name=tfstate" \
+                -backend-config="key=devtfstate" \
+                -backend-config="resource_group_name=vistara-automation"    
+        
         - task: TerraformTask@5
           inputs:
             provider: 'azurerm'
