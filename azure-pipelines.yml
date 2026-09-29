@@ -14,14 +14,6 @@ stages:
         - task: TerraformInstaller@1
           inputs:
             terraformVersion: '1.16.4'
-
-        - bash: |
-              echo "Terraform location:"
-              which terraform
-
-              echo "Terraform version:"
-              terraform version
-          displayName: Verify Terraform    
         
         - task: TerraformTask@5
           inputs:
@@ -29,7 +21,7 @@ stages:
             command: 'init'
             workingDirectory: '$(System.DefaultWorkingDirectory)/environment/dev'
             backendServiceArm: 'sc-vistara-automation'
-            
+            backendAzureRmOverrideSubscriptionID: '1a09cc15-f2cb-43ae-bfb9-05fc711f965c'
             backendAzureRmResourceGroupName: 'vistara-automation'
             backendAzureRmStorageAccountName: 'storagevistara999'
             backendAzureRmContainerName: 'tfstate'
@@ -62,7 +54,7 @@ stages:
             backendServiceArm: 'sc-vistara-automation'
             backendAzureRmOverrideSubscriptionID: '1a09cc15-f2cb-43ae-bfb9-05fc711f965c'
             backendAzureRmResourceGroupName: 'vistara-automation'
-            backendAzureRmStorageAccountName: 'storagevistara'
+            backendAzureRmStorageAccountName: 'storagevistara999'
             backendAzureRmContainerName: 'tfstate'
             backendAzureRmKey: 'devtfstate'
         - task: TerraformTask@5
