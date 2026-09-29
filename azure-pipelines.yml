@@ -1,5 +1,6 @@
 trigger:
   - main
+  - feature1
 
 pool: 
   vmImage: ubuntu-22.04
