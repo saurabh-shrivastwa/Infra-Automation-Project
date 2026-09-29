@@ -15,6 +15,15 @@ stages:
           inputs:
             terraformVersion: '1.16.4'
         
+        - bash: |
+            terraform init \
+              -backend-config="storage_account_name=storagevistara999" \
+              -backend-config="container_name=tfstate" \
+              -backend-config="key=devtfstate" \
+              -backend-config="resource_group_name=vistara-automation" \
+              -backend-config="subscription_id=1a09cc15-f2cb-43ae-bfb9-05fc711f965c" \
+              -backend-config="use_azuread_auth=true"
+          workingDirectory: '$(System.DefaultWorkingDirectory)/environment/dev'
         - task: TerraformTask@5
           inputs:
             provider: 'azurerm'
