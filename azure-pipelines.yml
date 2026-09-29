@@ -35,7 +35,7 @@ stages:
             environmentServiceNameAzureRM: 'sc-vistara-automation'
             environmentAzureRmOverrideSubscriptionID: '1a09cc15-f2cb-43ae-bfb9-05fc711f965c'
 
-stages:
+
   - stage:
     displayName: ContinousDelivery
     jobs:
