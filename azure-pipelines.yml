@@ -21,7 +21,7 @@ stages:
             azureSubscription: 'sc-vistara-automation' 
             scriptType: 'bash'
             scriptLocation: 'inlineScript'
-            workingDirectory: '$(System.DefaultWorkingDirectory)/Infra-Automation-Project/environment/dev'
+            workingDirectory: '$(System.DefaultWorkingDirectory)/environment/dev'
             inlineScript: |
               terraform init \
                 -backend-config="storage_account_name=storagevistara999" \
