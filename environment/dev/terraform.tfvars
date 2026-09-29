@@ -19,4 +19,10 @@ subnets = {
     virtual_network_name = "dev-vnet01"
     address_prefixes     = ["10.0.1.0/24"]
   }
+  subnet2 = {
+    name                 = "dev-subnet02"
+    resource_group_name  = "dev-rg01"
+    virtual_network_name = "dev-vnet01"
+    address_prefixes     = ["10.0.2.0/24"]
+}
 }
