@@ -23,3 +23,56 @@ stages:
               terraform version
           displayName: Verify Terraform    
         
+        - task: TerraformTask@5
+          inputs:
+            provider: 'azurerm'
+            command: 'init'
+            workingDirectory: '$(System.DefaultWorkingDirectory)/environment/dev'
+            backendServiceArm: 'sc-vistara-automation'
+            backendAzureRmOverrideSubscriptionID: '1a09cc15-f2cb-43ae-bfb9-05fc711f965c'
+            backendAzureRmResourceGroupName: 'vistara-automation'
+            backendAzureRmStorageAccountName: 'storagevistara'
+            backendAzureRmContainerName: 'tfstate'
+            backendAzureRmKey: 'devtfstate'
+        - task: TerraformTask@5
+          inputs:
+            provider: 'azurerm'
+            command: 'validate'
+            workingDirectory: '$(System.DefaultWorkingDirectory)/environment/dev'
+        - task: TerraformTask@5
+          inputs:
+            provider: 'azurerm'
+            command: 'plan'
+            workingDirectory: '$(System.DefaultWorkingDirectory)/environment/dev'
+            environmentServiceNameAzureRM: 'sc-vistara-automation'
+            environmentAzureRmOverrideSubscriptionID: '1a09cc15-f2cb-43ae-bfb9-05fc711f965c'
+
+
+  - stage:
+    displayName: ContinousDelivery
+    jobs:
+      - job:
+        displayName: TerraformApply
+        steps: 
+        - task: TerraformTask@5
+          inputs:
+            provider: 'azurerm'
+            command: 'init'
+            workingDirectory: '$(System.DefaultWorkingDirectory)/environment/dev'
+            backendServiceArm: 'sc-vistara-automation'
+            backendAzureRmOverrideSubscriptionID: '1a09cc15-f2cb-43ae-bfb9-05fc711f965c'
+            backendAzureRmResourceGroupName: 'vistara-automation'
+            backendAzureRmStorageAccountName: 'storagevistara'
+            backendAzureRmContainerName: 'tfstate'
+            backendAzureRmKey: 'devtfstate'
+        - task: TerraformTask@5
+          inputs:
+            provider: 'azurerm'
+            command: 'apply'
+            workingDirectory: '$(System.DefaultWorkingDirectory)/environment/dev'
+            environmentServiceNameAzureRM: 'sc-vistara-automation'
+            environmentAzureRmOverrideSubscriptionID: '1a09cc15-f2cb-43ae-bfb9-05fc711f965c'
+                             
+
+
+ 
