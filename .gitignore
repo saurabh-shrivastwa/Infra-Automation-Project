@@ -1,0 +1,15 @@
+# Terraform
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+
+# Terraform variable files
+*.tfvars
+*.tfvars.json
+
+# Terraform lock file - optional
+# Uncomment if you don't want to commit it
+.terraform.lock.hcl
